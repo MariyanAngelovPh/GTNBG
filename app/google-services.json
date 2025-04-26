@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "199781098162",
+    "project_id": "gettoknowbulgaria-7ce6c",
+    "storage_bucket": "gettoknowbulgaria-7ce6c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:199781098162:android:c4fcbaa17c3e00a6099fab",
+        "android_client_info": {
+          "package_name": "com.example.gettoknowbulgaria"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAsLpxUj2n6XvZjGLsKC7P2ti3XLVTTmas"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
