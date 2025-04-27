@@ -11,9 +11,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 import com.example.gettoknowbulgaria.data.Landmark
 import com.google.firebase.firestore.FirebaseFirestore
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
+import com.google.firebase.storage.FirebaseStorage
+
 
 class LandmarkDetailsActivity : AppCompatActivity() {
 
@@ -21,19 +22,7 @@ class LandmarkDetailsActivity : AppCompatActivity() {
     private lateinit var similarAdapter: LandmarkSmallAdapter
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
-            val selectedImageView = ImageView(this)
-            selectedImageView.layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            selectedImageView.adjustViewBounds = true
-
-            Glide.with(this)
-                .load(uri)
-                .into(selectedImageView)
-
-            val linearLayout = findViewById<LinearLayout>(R.id.linearLayoutPhotos)
-            linearLayout.addView(selectedImageView)
+            uploadImageToFirebase(uri)
         }
     }
 
@@ -123,6 +112,98 @@ class LandmarkDetailsActivity : AppCompatActivity() {
             .addOnFailureListener {
                 Toast.makeText(this, "Грешка при зареждане на подобни забележителности.", Toast.LENGTH_SHORT).show()
             }
+
+        loadPhotosForLandmark()
+
     }
+
+    private fun uploadImageToFirebase(imageUri: Uri) {
+        val storageReference = FirebaseStorage.getInstance().reference
+        val fileName = UUID.randomUUID().toString() + ".jpg"
+        val imageRef = storageReference.child("landmark_photos/$fileName")
+
+        imageRef.putFile(imageUri)
+            .addOnSuccessListener {
+                imageRef.downloadUrl.addOnSuccessListener { uri ->
+                    addImageToLayout(uri.toString())
+                    saveImageUrlToFirestore(uri.toString())
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Грешка при качване на снимката", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+
+    private fun addImageToLayout(imageUrl: String) {
+        val selectedImageView = ImageView(this)
+        selectedImageView.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        selectedImageView.adjustViewBounds = true
+
+        Glide.with(this)
+            .load(imageUrl)
+            .into(selectedImageView)
+
+        val linearLayout = findViewById<LinearLayout>(R.id.linearLayoutPhotos)
+        linearLayout.addView(selectedImageView)
+    }
+
+    private fun saveImageUrlToFirestore(imageUrl: String) {
+        val landmarkName = intent.getStringExtra("name") ?: return
+        val db = FirebaseFirestore.getInstance()
+
+        val imageData = hashMapOf(
+            "landmark_name" to landmarkName,
+            "image_url" to imageUrl,
+            "timestamp" to System.currentTimeMillis()
+        )
+
+        db.collection("landmark_photos")
+            .add(imageData)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Снимката е запазена успешно ✅", Toast.LENGTH_SHORT).show()
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Грешка при запис в базата 🛑", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun loadPhotosForLandmark() {
+        val landmarkName = intent.getStringExtra("name") ?: return
+        val db = FirebaseFirestore.getInstance()
+
+        db.collection("landmark_photos")
+            .whereEqualTo("landmark_name", landmarkName)
+            .orderBy("timestamp") // по ред на качване
+            .get()
+            .addOnSuccessListener { documents ->
+                val linearLayout = findViewById<LinearLayout>(R.id.linearLayoutPhotos)
+
+                for (document in documents) {
+                    val imageUrl = document.getString("image_url")
+                    if (imageUrl != null) {
+                        val imageView = ImageView(this)
+                        imageView.layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        )
+                        imageView.adjustViewBounds = true
+
+                        Glide.with(this)
+                            .load(imageUrl)
+                            .into(imageView)
+
+                        linearLayout.addView(imageView)
+                    }
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Грешка при зареждане на снимките 🛑", Toast.LENGTH_SHORT).show()
+            }
+    }
+
 
 }

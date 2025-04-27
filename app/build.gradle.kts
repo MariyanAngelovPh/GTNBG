@@ -40,10 +40,6 @@ android {
 }
 
 dependencies {
-    // Room
-//    implementation("androidx.room:room-runtime:2.6.1")
-//    implementation("androidx.room:room-ktx:2.6.1")
-//    kapt("androidx.room:room-compiler:2.6.1")
 
     // Glide (image loader)
     implementation("com.github.bumptech.glide:glide:4.16.0")
@@ -66,5 +62,6 @@ dependencies {
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
     implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-storage-ktx")
 
 }
