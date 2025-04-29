@@ -12,7 +12,7 @@ import com.example.gettoknowbulgaria.R
 import com.example.gettoknowbulgaria.ui.adapter.VisitedLandmarkAdapter
 import com.google.firebase.firestore.FirebaseFirestore
 import android.widget.Toast
-import com.example.gettoknowbulgaria.data.VisitedLandmark
+import com.example.gettoknowbulgaria.ui.adapter.VisitedLandmark
 
 class ProfileActivity : AppCompatActivity() {
 

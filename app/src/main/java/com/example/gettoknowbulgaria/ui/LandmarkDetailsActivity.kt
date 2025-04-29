@@ -14,6 +14,19 @@ import com.google.firebase.firestore.FirebaseFirestore
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.firebase.storage.FirebaseStorage
+import com.example.gettoknowbulgaria.ui.adapter.PhotoAdapter
+import com.example.gettoknowbulgaria.ui.adapter.PhotoItem
+import okhttp3.*
+import org.json.JSONObject
+import android.util.Base64
+import android.util.Log
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.FormBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okio.IOException
 
 
 class LandmarkDetailsActivity : AppCompatActivity() {
@@ -22,9 +35,12 @@ class LandmarkDetailsActivity : AppCompatActivity() {
     private lateinit var similarAdapter: LandmarkSmallAdapter
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
-            uploadImageToFirebase(uri)
+            uploadImageToImgBB(uri)
         }
     }
+    private lateinit var photoRecyclerView: RecyclerView
+    private lateinit var photoAdapter: PhotoAdapter
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +55,12 @@ class LandmarkDetailsActivity : AppCompatActivity() {
         val buttonVisited = findViewById<Button>(R.id.buttonMarkVisited)
         val buttonAddPhoto = findViewById<Button>(R.id.buttonAddPhoto)
         val buttonBack = findViewById<Button>(R.id.buttonBackToList)
+        photoRecyclerView = findViewById(R.id.recyclerViewPhotos)
+        photoAdapter = PhotoAdapter(mutableListOf()) // започваме с празен списък
+        photoRecyclerView.layoutManager = LinearLayoutManager(this)
+        photoRecyclerView.adapter = photoAdapter
+
+
 
         similarRecyclerView = findViewById(R.id.recyclerViewSimilar)
         similarRecyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -117,47 +139,64 @@ class LandmarkDetailsActivity : AppCompatActivity() {
 
     }
 
-    private fun uploadImageToFirebase(imageUri: Uri) {
-        val storageReference = FirebaseStorage.getInstance().reference
-        val fileName = UUID.randomUUID().toString() + ".jpg"
-        val imageRef = storageReference.child("landmark_photos/$fileName")
+    private fun uploadImageToImgBB(imageUri: Uri) {
+        val apiKey = "724f70c0f804c51ccbeaba2fd1062585"
 
-        imageRef.putFile(imageUri)
-            .addOnSuccessListener {
-                imageRef.downloadUrl.addOnSuccessListener { uri ->
-                    addImageToLayout(uri.toString())
-                    saveImageUrlToFirestore(uri.toString())
+        val inputStream = contentResolver.openInputStream(imageUri)
+        val bytes = inputStream?.readBytes()
+        val base64Image = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+        val requestBody = FormBody.Builder()
+            .add("key", apiKey)
+            .add("image", base64Image)
+            .build()
+
+        val request = Request.Builder()
+            .url("https://api.imgbb.com/1/upload")
+            .post(requestBody)
+            .build()
+
+        OkHttpClient().newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    Toast.makeText(this@LandmarkDetailsActivity, "Грешка при качване ❌", Toast.LENGTH_SHORT).show()
                 }
             }
-            .addOnFailureListener {
-                Toast.makeText(this, "Грешка при качване на снимката", Toast.LENGTH_SHORT).show()
+
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "")
+                    val data = json.getJSONObject("data")
+                    val imageUrl = data.getString("display_url")  // 🟢 това винаги е изображение
+                    Log.d("ImgBB", "Img URL used: $imageUrl")
+
+                    Log.d("ImgBB", "Получен imageUrl: $imageUrl")
+
+                    runOnUiThread {
+                        saveImageUrlToFirestore(imageUrl)
+                        Toast.makeText(this@LandmarkDetailsActivity, "Снимката е качена успешно ✅", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@LandmarkDetailsActivity, "ImgBB грешка ❌", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
+        })
+
     }
 
-
-    private fun addImageToLayout(imageUrl: String) {
-        val selectedImageView = ImageView(this)
-        selectedImageView.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        selectedImageView.adjustViewBounds = true
-
-        Glide.with(this)
-            .load(imageUrl)
-            .into(selectedImageView)
-
-        val linearLayout = findViewById<LinearLayout>(R.id.linearLayoutPhotos)
-        linearLayout.addView(selectedImageView)
-    }
 
     private fun saveImageUrlToFirestore(imageUrl: String) {
         val landmarkName = intent.getStringExtra("name") ?: return
         val db = FirebaseFirestore.getInstance()
+        val sharedPref = getSharedPreferences("UserPrefs", MODE_PRIVATE)
+        val username = sharedPref.getString("username", "непознат") ?: "непознат"
 
         val imageData = hashMapOf(
             "landmark_name" to landmarkName,
             "image_url" to imageUrl,
+            "uploader" to username,
             "timestamp" to System.currentTimeMillis()
         )
 
@@ -165,11 +204,16 @@ class LandmarkDetailsActivity : AppCompatActivity() {
             .add(imageData)
             .addOnSuccessListener {
                 Toast.makeText(this, "Снимката е запазена успешно ✅", Toast.LENGTH_SHORT).show()
+                loadPhotosForLandmark() // ⬅️ Презарежда снимките след запис
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Грешка при запис в базата 🛑", Toast.LENGTH_SHORT).show()
             }
+
+        Log.d("FirestoreSave", "Записваме URL: $imageUrl за $landmarkName")
+
     }
+
 
     private fun loadPhotosForLandmark() {
         val landmarkName = intent.getStringExtra("name") ?: return
@@ -177,33 +221,19 @@ class LandmarkDetailsActivity : AppCompatActivity() {
 
         db.collection("landmark_photos")
             .whereEqualTo("landmark_name", landmarkName)
-            .orderBy("timestamp") // по ред на качване
+            .orderBy("timestamp")
             .get()
             .addOnSuccessListener { documents ->
-                val linearLayout = findViewById<LinearLayout>(R.id.linearLayoutPhotos)
-
-                for (document in documents) {
-                    val imageUrl = document.getString("image_url")
-                    if (imageUrl != null) {
-                        val imageView = ImageView(this)
-                        imageView.layoutParams = LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT
-                        )
-                        imageView.adjustViewBounds = true
-
-                        Glide.with(this)
-                            .load(imageUrl)
-                            .into(imageView)
-
-                        linearLayout.addView(imageView)
-                    }
+                val photoList = documents.mapNotNull {
+                    val url = it.getString("image_url")
+                    val uploader = it.getString("uploader") ?: "неизвестен"
+                    if (url != null) PhotoItem(url, uploader) else null
                 }
+                Log.d("FirestoreDebug", "Намерени снимки: ${photoList.size}")
+                photoAdapter.updateData(photoList) // ⬅️ най-важното
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Грешка при зареждане на снимките 🛑", Toast.LENGTH_SHORT).show()
             }
     }
-
-
 }

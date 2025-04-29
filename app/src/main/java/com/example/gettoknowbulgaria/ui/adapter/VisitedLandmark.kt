@@ -1,4 +1,4 @@
-package com.example.gettoknowbulgaria.data
+package com.example.gettoknowbulgaria.ui.adapter
 
 data class VisitedLandmark(
     val username: String = "",

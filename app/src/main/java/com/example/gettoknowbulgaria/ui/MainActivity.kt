@@ -9,7 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.viewpager2.widget.ViewPager2
 import com.example.gettoknowbulgaria.R
 import com.example.gettoknowbulgaria.ui.adapter.ImageSliderAdapter
-import com.example.gettoknowbulgaria.ui.LandmarksListActivity
+//import com.example.gettoknowbulgaria.ui.LandmarksListActivity
 
 
 class MainActivity : AppCompatActivity() {
