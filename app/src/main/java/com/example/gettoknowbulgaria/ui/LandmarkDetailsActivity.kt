@@ -27,6 +27,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okio.IOException
+import android.content.Intent
 
 
 class LandmarkDetailsActivity : AppCompatActivity() {
@@ -45,6 +46,7 @@ class LandmarkDetailsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_landmark_details)
+
 
         val imageView = findViewById<ImageView>(R.id.imageViewLandmark)
         val textViewName = findViewById<TextView>(R.id.textViewLandmarkName)
@@ -75,18 +77,43 @@ class LandmarkDetailsActivity : AppCompatActivity() {
         val type = intent.getStringExtra("type") ?: ""
         val city = intent.getStringExtra("city") ?: ""
         val manicipality = intent.getStringExtra("manicipality") ?: ""
-        val gps = intent.getStringExtra("location") ?: ""
 
         textViewName.text = name
         textViewDescription.text = description
         textViewType.text = type
         textViewCityRegion.text = "$city, $manicipality"
-        textViewGPS.text = gps
 
         Glide.with(this)
             .load(imagePath.ifBlank { null }) // Предпазно зареждане
             .placeholder(R.drawable.ic_launcher_foreground) // Drawable ресурс
             .into(imageView)
+
+        val gps = intent.getStringExtra("location") ?: ""
+        textViewGPS.text = gps
+
+        textViewGPS.setOnClickListener {
+            val location = gps.trim()
+            if (location.isNotEmpty()) {
+                val gmmIntentUri = Uri.parse("geo:0,0?q=$location")
+                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+
+                val mapsInstalled = packageManager.getLaunchIntentForPackage("com.google.android.apps.maps") != null
+                if (mapsInstalled) {
+                    mapIntent.setPackage("com.google.android.apps.maps")
+                }
+
+                if (mapIntent.resolveActivity(packageManager) != null) {
+                    startActivity(mapIntent)
+                } else {
+                    val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encode(location)}")
+                    val webIntent = Intent(Intent.ACTION_VIEW, webUri)
+                    startActivity(webIntent)
+                }
+            }
+        }
+
+
+        textViewGPS.text = gps
 
         buttonVisited.setOnClickListener {
             val sharedPref = getSharedPreferences("UserPrefs", MODE_PRIVATE)
